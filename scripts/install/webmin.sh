@@ -40,7 +40,16 @@ _install_webmin() {
         echo_warn "apt update returned non-zero status; checking for webmin-specific errors"
     fi
     if grep -Ei "not signed|no_pubkey|NO_PUBKEY|The repository.*is not signed" "$apt_update_output" >/dev/null 2>&1; then
-        echo_warn "Webmin repository update failed due to missing/invalid GPG key or unsigned Release. Attempting insecure 'trusted=yes' fallback."
+        echo_warn "Webmin repository update failed due to missing/invalid GPG key or unsigned Release."
+        # Only allow insecure bypass if explicitly enabled by env var
+        if [[ "${ALLOW_INSECURE_WEBMIN:-0}" != "1" ]]; then
+            echo_error "The installer will not bypass GPG verification by default."
+            echo_info "To allow the insecure fallback (not recommended), re-run the installer with the flag: --allow-insecure-webmin"
+            rm -f "$apt_update_output"
+            return 1
+        fi
+
+        echo_warn "ALLOW_INSECURE_WEBMIN=1 detected; attempting insecure 'trusted=yes' fallback as requested."
         # Overwrite the source entry to bypass signature checks (insecure)
         echo "deb [trusted=yes] https://download.webmin.com/download/repository sarge contrib" > /etc/apt/sources.list.d/webmin.list
         # Retry update and install

@@ -144,6 +144,10 @@ function _option_parse() {
                 postcommand="$1"
                 echo_info "Post-install command = \"$postcommand\""
                 ;;
+            --allow-insecure-webmin)
+                export ALLOW_INSECURE_WEBMIN=1
+                echo_info "ALLOW_INSECURE_WEBMIN enabled: installer will allow an insecure Webmin fallback"
+                ;;
             -*)
                 echo_error "Error: Invalid option: $1"
                 exit 1

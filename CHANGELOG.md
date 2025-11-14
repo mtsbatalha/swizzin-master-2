@@ -27,6 +27,7 @@ For full details on individual scripts and options, see the `scripts/` directory
 
 - Repository renamed to `mtsbatalha/swizzin-master-2` on GitHub; local working folder renamed to `swizzin-master-2`.
 - Minor docs update: `README.md` annotated with the new repo name.
+ - Add `--allow-insecure-webmin` installer flag: opt-in insecure fallback for Webmin repository signature errors (writes `trusted=yes`). Use only if you understand the security implications.
 
 # Changelog
 

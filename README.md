@@ -69,6 +69,8 @@ Want something a bit more complex, specify package install variables, don't want
 bash <(curl -sL git.io/swizzin) --env /path/to/your/env/file/here.env
 ```
 
+If you encounter repository signature errors for Webmin (for example when older DSA keys are rejected by modern apt), the installer will not bypass GPG verification by default. To explicitly allow an insecure fallback for Webmin (which writes a `trusted=yes` source entry and bypasses signature checks), run the installer with the `--allow-insecure-webmin` flag. This is not recommended for general use — prefer fixing the repository key or importing a secure key manually.
+
 ### Supported Operating Systems
 
 Long-term support branches only:
