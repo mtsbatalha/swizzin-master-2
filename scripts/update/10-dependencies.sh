@@ -2,10 +2,16 @@
 # Ensures that dependencies are installed and corrects them if that is not the case.
 
 if ! which add-apt-repository > /dev/null; then
-    echo_info "Installing software-properties-common to enable repository management"
-    # Ensure apt cache is updated before installing software-properties-common
+    echo_info "Repository management tools not found; attempting to install software-properties-common"
+    # Ensure apt cache is updated before checking/installing software-properties-common
     apt_update
-    apt_install software-properties-common # Ubuntu may require universe/mutliverse enabled for certain packages so we must ensure repos are enabled before deps are attempted to installed
+    # Check if software-properties-common is available in the cache
+    if apt-cache show software-properties-common > /dev/null 2>&1; then
+        apt_install software-properties-common
+    else
+        echo_warn "Package 'software-properties-common' not found in repositories; skipping (may not be available on this distribution)"
+        # For Debian/minimal systems, add-apt-repository may still work via apt-add-repository
+    fi
 fi
 
 if [[ $(_os_distro) == "ubuntu" ]]; then
