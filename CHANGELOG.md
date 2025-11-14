@@ -22,6 +22,12 @@ All notable changes to this project will be documented in this file.
 - The repository default branch has been renamed to `main`.
 
 For full details on individual scripts and options, see the `scripts/` directory and `TUNING_GUIDE.md`.
+
+## v3.14.2 - 2025-11-14
+
+- Repository renamed to `mtsbatalha/swizzin-master-2` on GitHub; local working folder renamed to `swizzin-master-2`.
+- Minor docs update: `README.md` annotated with the new repo name.
+
 # Changelog
 
 ## [3.14.0]
