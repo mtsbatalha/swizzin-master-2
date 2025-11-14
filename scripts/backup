@@ -19,12 +19,19 @@ function _backup_intro() {
 
 function _backup_menu() {
     choice=$(
-        whiptail --title "Backup Manager" --menu "Select option:" --ok-button "Continue" --nocancel 13 50 4 \
+        whiptail --title "Backup Manager" --menu "Select option:" --ok-button "Continue" --cancel-button "Back" 14 50 5 \
             "Backup" "Create configuration backups" \
             "List" "View backup files" \
             "Restore" "Restore from backup" \
-            "Cleanup" "Remove old backups" 3>&1 1>&2 2>&3
+            "Cleanup" "Remove old backups" \
+            "Back" "Return to main menu" 3>&1 1>&2 2>&3
     )
+    
+    # Check if user pressed Cancel or selected Back
+    if [[ -z "$choice" ]] || [[ "$choice" == "Back" ]]; then
+        echo_info "Returning to main menu"
+        return 0
+    fi
     
     case $choice in
         Backup)
