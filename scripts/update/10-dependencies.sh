@@ -2,6 +2,9 @@
 # Ensures that dependencies are installed and corrects them if that is not the case.
 
 if ! which add-apt-repository > /dev/null; then
+    echo_info "Installing software-properties-common to enable repository management"
+    # Ensure apt cache is updated before installing software-properties-common
+    apt_update
     apt_install software-properties-common # Ubuntu may require universe/mutliverse enabled for certain packages so we must ensure repos are enabled before deps are attempted to installed
 fi
 
