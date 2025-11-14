@@ -6,10 +6,22 @@ function install_rar() {
     if ! which unrar > /dev/null; then
         case "$(_os_arch)" in
             "amd64")
-                apt_install rar unrar
+                # Try apt install, but gracefully skip if packages don't exist
+                if apt-cache show rar unrar > /dev/null 2>&1; then
+                    apt_install rar unrar
+                else
+                    echo_warn "rar/unrar packages not found in repositories; attempting compilation from source"
+                    srcurl="http://www.rarlab.com/rar/unrarsrc-6.0.3.tar.gz"
+                fi
                 ;;
             "arm64")
-                apt_install unrar
+                # Try apt install, but gracefully skip if package doesn't exist
+                if apt-cache show unrar > /dev/null 2>&1; then
+                    apt_install unrar
+                else
+                    echo_warn "unrar package not found in repositories; attempting compilation from source"
+                    srcurl="http://www.rarlab.com/rar/unrarsrc-6.0.3.tar.gz"
+                fi
                 ;;
             *) # Default case if needs to be compiled from source
                 srcurl="http://www.rarlab.com/rar/unrarsrc-6.0.3.tar.gz"
