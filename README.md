@@ -4,6 +4,9 @@
 
 # 3.14.0 Stable
 
+> Repository renamed: `mtsbatalha/swizzin-master-2`
+
+
 [website](https://swizzin.ltd) \| [docs](https://swizzin.ltd/getting-started) \| [discord](https://discord.gg/bDFqAUF)
 
 Please use [Discord](https://discord.gg/bDFqAUF) for all community functions, and [GitHub discussions](https://github.com/swizzin/swizzin/discussions) for feature requests and to raise issues.
