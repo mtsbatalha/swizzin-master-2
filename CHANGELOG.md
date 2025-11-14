@@ -2,9 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## v3.14.3 - 2025-11-14
+
+- **REMOVED**: Debian 13 (trixie) support due to incompatibilities and script failures. Swizzin now supports Debian 11/12 only.
+  - Removed trixie codename checks from `setup.sh`, function files, and installer scripts.
+  - Updated README and documentation to reflect Debian 11/12 support only.
+
 ## v3.14.1 - 2025-11-14
 
-- Add Debian 13 (trixie) compatibility across installer and functions.
+- Add Debian 13 (trixie) compatibility across installer and functions. **(Note: removed in v3.14.3)**
 - Add `box tune` — interactive tuning menu for OS, Network, BBR, Torrent clients and Plex optimizations.
   - OS tuning: sysctl adjustments (file descriptors, VM dirty ratios, etc.)
   - Network tuning: TCP buffers, window scaling, port range, Fast Open

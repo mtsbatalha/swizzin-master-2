@@ -5,7 +5,7 @@ function whiptail_deluge() {
     if [[ -z $DELUGE_VERSION ]]; then
         repov=$(get_candidate_version deluge)
         case $(_os_codename) in
-            buster | focal | bullseye | jammy | bookworm | trixie)
+            buster | focal | bullseye | jammy | bookworm)
                 function=$(whiptail --title "Pick deluge version" --menu "Choose a Deluge version:" --ok-button "Continue" --nocancel 12 50 5 \
                     "Repo" "${repov}" \
                     "Deluge 2.2" "" \

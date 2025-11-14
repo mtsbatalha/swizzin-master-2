@@ -37,7 +37,6 @@ body:
       label: What OS are you using?
       multiple: false
       options:
-        - Debian 13 (Trixie)
         - Debian 12 (Bookworm)
         - Ubuntu 22.04 (Jammy)
         - Debian 11 (Bullseye)

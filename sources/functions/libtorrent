@@ -145,7 +145,7 @@ function booststrap() {
         buster | focal | bullseye | jammy)
             BOOST_VERSION=1_75_0
             ;;
-        bookworm | trixie)
+        bookworm)
             BOOST_VERSION=1_85_0
             ;;
         *)
