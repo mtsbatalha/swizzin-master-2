@@ -359,6 +359,11 @@ function _post() {
     fi
     #echo "export PATH=\$PATH:/usr/local/bin/swizzin" >> /home/$user/.bashrc
     #chown ${user}: /home/$user/.profile
+    
+    # Create symlink for box command to be accessible from anywhere
+    ln -sf /usr/local/bin/swizzin/box /usr/local/bin/box
+    ln -sf /usr/local/bin/swizzin/rtx /usr/local/bin/rtx
+    
     echo "Defaults    secure_path = /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/swizzin" > /etc/sudoers.d/secure_path
     if [[ $distribution = "Ubuntu" ]]; then
         echo 'Defaults  env_keep -="HOME"' > /etc/sudoers.d/env_keep
