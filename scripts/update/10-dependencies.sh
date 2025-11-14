@@ -77,12 +77,24 @@ elif [[ $(_os_distro) == "debian" ]]; then
     else
         if ! grep contrib /etc/apt/sources.list | grep -q -v '^#'; then
             echo_info "Enabling contrib repo"
-            apt-add-repository -y contrib >> ${log} 2>&1
+            # Try apt-add-repository first, fallback to direct sed editing
+            if which apt-add-repository > /dev/null 2>&1; then
+                apt-add-repository -y contrib >> ${log} 2>&1
+            else
+                echo_warn "apt-add-repository not found; using sed to edit sources.list directly"
+                sed -i 's/^deb \(.*\)$/deb \1 contrib/' /etc/apt/sources.list
+            fi
             trigger_apt_update=true
         fi
         if ! grep -P '\bnon-free(\s|$)' /etc/apt/sources.list | grep -q -v '^#'; then
             echo_info "Enabling non-free repo"
-            apt-add-repository -y non-free >> ${log} 2>&1
+            # Try apt-add-repository first, fallback to direct sed editing
+            if which apt-add-repository > /dev/null 2>&1; then
+                apt-add-repository -y non-free >> ${log} 2>&1
+            else
+                echo_warn "apt-add-repository not found; using sed to edit sources.list directly"
+                sed -i 's/^deb \(.*\)$/deb \1 non-free/' /etc/apt/sources.list
+            fi
             trigger_apt_update=true
         fi
     fi
