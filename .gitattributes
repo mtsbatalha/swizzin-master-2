@@ -1,0 +1,23 @@
+# Auto detect text files and normalize to LF in the repository
+* text=auto
+
+# Ensure shell scripts use LF endings
+*.sh text eol=lf
+
+# Common text formats
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.ini text eol=lf
+
+# Python and other source files
+*.py text eol=lf
+*.pl text eol=lf
+*.js text eol=lf
+
+# Binary files (no end-of-line normalization)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary

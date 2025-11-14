@@ -105,6 +105,12 @@ Box functions:
 -   rtx - starts the r(u)Torrent extras management interface (`rtx` alone will also do)
     -   Usage: `box rtx` or `rtx`
 
+-   tune - opens an interactive tuning menu to optimize OS, network, BBR, Plex, and torrent client settings. Includes rollback for safe restores.
+    -   Usage: `box tune`
+
+-   backup - manage configuration backups for torrent clients and Plex (create, list, restore, cleanup).
+    -   Usage: `box backup`
+
 
 ## Contributing
 We welcome any bug fixes, improvements or new applications submitted through Pull Requests. We have a short [Contributing guideline](CONTRIBUTING.md) that we'd like you to consult before so that we can keep our code clean and organized and keep your submissions supported properly.
