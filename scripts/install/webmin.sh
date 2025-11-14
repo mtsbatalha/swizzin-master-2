@@ -34,7 +34,20 @@ _install_webmin() {
     fi
 
     echo_progress_done "Repo added"
-    apt_update
+    # Run apt update and capture output to detect unsigned repo / missing key errors
+    apt_update_output=$(mktemp)
+    if ! apt_update 2>&1 | tee "$apt_update_output"; then
+        echo_warn "apt update returned non-zero status; checking for webmin-specific errors"
+    fi
+    if grep -Ei "not signed|no_pubkey|NO_PUBKEY|The repository.*is not signed" "$apt_update_output" >/dev/null 2>&1; then
+        echo_error "Webmin repository update failed due to missing/invalid GPG key or unsigned Release. Removing temporary repo entry."
+        rm -f /etc/apt/sources.list.d/webmin.list
+        rm -f /usr/share/keyrings/webmin-archive-keyring.gpg
+        rm -f "$apt_update_output"
+        return 1
+    fi
+    rm -f "$apt_update_output"
+
     apt_install webmin || echo_warn "webmin package installation failed; check apt logs"
 }
 
