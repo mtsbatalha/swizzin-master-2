@@ -1,3 +1,27 @@
+# CHANGELOG
+
+All notable changes to this project will be documented in this file.
+
+## v3.14.1 - 2025-11-14
+
+- Add Debian 13 (trixie) compatibility across installer and functions.
+- Add `box tune` — interactive tuning menu for OS, Network, BBR, Torrent clients and Plex optimizations.
+  - OS tuning: sysctl adjustments (file descriptors, VM dirty ratios, etc.)
+  - Network tuning: TCP buffers, window scaling, port range, Fast Open
+  - BBR: enable tcp_bbr and `fq` qdisc setup
+  - Torrent clients: config-friendly tuning where applicable
+  - Plex: streaming/transcoding optimizations and hardware encoding toggles
+- Add safe rollback for tuning changes with automatic backups.
+- Add standalone backup manager accessible from main `box` menu: `box backup` (create/list/restore/cleanup).
+- Move backup functionality out of the `tune` menu so backups are only handled by the main `box` backup manager.
+- Add `.gitattributes` to normalize EOL and reduce CRLF warnings on Windows.
+- Update `README.md` to document `tune` and `backup` commands.
+
+### Notes
+- Backups are stored at `/root/swizzin_backups` and are timestamped.
+- The repository default branch has been renamed to `main`.
+
+For full details on individual scripts and options, see the `scripts/` directory and `TUNING_GUIDE.md`.
 # Changelog
 
 ## [3.14.0]
