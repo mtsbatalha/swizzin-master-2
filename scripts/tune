@@ -1,0 +1,476 @@
+#!/bin/bash
+#
+# [swizzin :: OS/Network/Torrent Client Tuning Script]
+# Performance optimization for seedbox environments
+#
+# Author             :   swizzin | liara
+#
+# Licensed under GNU General Public License v3.0 GPL-3 (in short)
+#
+
+#shellcheck source=sources/globals.sh
+. /etc/swizzin/sources/globals.sh
+
+function _tune_intro() {
+    whiptail --title "System Tuning" --msgbox "Welcome to the Swizzin Tuning Tool!\n\nThis tool will optimize your system for seedbox performance by adjusting:\n• OS kernel parameters\n• Network stack settings\n• Torrent client configurations\n\nPlease ensure you understand the changes before proceeding." 14 60
+}
+
+function _tune_menu() {
+    choice=$(
+        whiptail --title "System Tuning Options" --menu "Select tuning option:" --ok-button "Continue" --nocancel 15 50 6 \
+            "OS" "Kernel & system parameters" \
+            "Network" "TCP/IP stack optimization" \
+            "BBR" "Google BBR congestion control" \
+            "Torrent" "Torrent client tuning" \
+            "Plex" "Plex Media Server optimization" \
+            "Rollback" "Revert tuning changes" 3>&1 1>&2 2>&3
+    )
+    
+    case $choice in
+        OS)
+            _tune_os
+            ;;
+        Network)
+            _tune_network
+            ;;
+        BBR)
+            _tune_bbr
+            ;;
+        Torrent)
+            _tune_torrent
+            ;;
+        Plex)
+            _tune_plex
+            ;;
+        Rollback)
+            _rollback_tuning
+            ;;
+    esac
+    _tune_menu
+}
+
+function _tune_os() {
+    echo_progress_start "Optimizing OS parameters"
+    
+    # Increase max file descriptors
+    if ! grep -q "^fs.file-max" /etc/sysctl.conf; then
+        echo "fs.file-max = 2097152" >> /etc/sysctl.conf
+        echo_log_only "Added fs.file-max = 2097152"
+    fi
+    
+    # Increase inode cache
+    if ! grep -q "^fs.inode-max" /etc/sysctl.conf; then
+        echo "fs.inode-max = 2097152" >> /etc/sysctl.conf
+        echo_log_only "Added fs.inode-max = 2097152"
+    fi
+    
+    # Optimize file system
+    if ! grep -q "^vm.dirty_ratio" /etc/sysctl.conf; then
+        echo "vm.dirty_ratio = 5" >> /etc/sysctl.conf
+        echo_log_only "Added vm.dirty_ratio = 5"
+    fi
+    
+    if ! grep -q "^vm.dirty_background_ratio" /etc/sysctl.conf; then
+        echo "vm.dirty_background_ratio = 2" >> /etc/sysctl.conf
+        echo_log_only "Added vm.dirty_background_ratio = 2"
+    fi
+    
+    # Increase pid max
+    if ! grep -q "^kernel.pid_max" /etc/sysctl.conf; then
+        echo "kernel.pid_max = 65535" >> /etc/sysctl.conf
+        echo_log_only "Added kernel.pid_max = 65535"
+    fi
+    
+    # Apply changes
+    sysctl -p > /dev/null 2>&1
+    
+    echo_progress_done "OS parameters optimized"
+}
+
+function _tune_network() {
+    echo_progress_start "Optimizing network parameters"
+    
+    # TCP buffer tuning
+    if ! grep -q "^net.core.rmem_max" /etc/sysctl.conf; then
+        echo "net.core.rmem_max = 134217728" >> /etc/sysctl.conf
+        echo "net.core.wmem_max = 134217728" >> /etc/sysctl.conf
+        echo_log_only "Added TCP buffer tuning"
+    fi
+    
+    # TCP window scaling
+    if ! grep -q "^net.ipv4.tcp_window_scaling" /etc/sysctl.conf; then
+        echo "net.ipv4.tcp_window_scaling = 1" >> /etc/sysctl.conf
+        echo_log_only "Added TCP window scaling"
+    fi
+    
+    # Enable TCP Fast Open
+    if ! grep -q "^net.ipv4.tcp_fastopen" /etc/sysctl.conf; then
+        echo "net.ipv4.tcp_fastopen = 3" >> /etc/sysctl.conf
+        echo_log_only "Added TCP Fast Open"
+    fi
+    
+    # Optimize connection backlog
+    if ! grep -q "^net.ipv4.tcp_max_syn_backlog" /etc/sysctl.conf; then
+        echo "net.ipv4.tcp_max_syn_backlog = 4096" >> /etc/sysctl.conf
+        echo_log_only "Added TCP max syn backlog"
+    fi
+    
+    # Enable timestamps but reduce tw buckets
+    if ! grep -q "^net.ipv4.tcp_timestamps" /etc/sysctl.conf; then
+        echo "net.ipv4.tcp_timestamps = 1" >> /etc/sysctl.conf
+        echo_log_only "Added TCP timestamps"
+    fi
+    
+    if ! grep -q "^net.ipv4.ip_local_port_range" /etc/sysctl.conf; then
+        echo "net.ipv4.ip_local_port_range = 1024 65535" >> /etc/sysctl.conf
+        echo_log_only "Added extended local port range"
+    fi
+    
+    # Apply changes
+    sysctl -p > /dev/null 2>&1
+    
+    echo_progress_done "Network parameters optimized"
+}
+
+function _tune_torrent() {
+    echo_progress_start "Optimizing torrent client settings"
+    
+    choice=$(
+        whiptail --title "Torrent Client Tuning" --menu "Select torrent client:" --ok-button "Continue" --nocancel 10 50 3 \
+            "rtorrent" "Tune rTorrent settings" \
+            "qbittorrent" "Tune qBittorrent settings" \
+            "deluge" "Tune Deluge settings" 3>&1 1>&2 2>&3
+    )
+    
+    case $choice in
+        rtorrent)
+            _tune_rtorrent
+            ;;
+        qbittorrent)
+            _tune_qbittorrent
+            ;;
+        deluge)
+            _tune_deluge
+            ;;
+    esac
+}
+
+function _tune_rtorrent() {
+    if [[ ! -f /install/.rtorrent.lock ]]; then
+        echo_error "rTorrent is not installed"
+        return 1
+    fi
+    
+    echo_progress_start "Tuning rTorrent"
+    
+    # Get master user
+    master=$(_get_master_username)
+    rtorrent_config="/home/${master}/.rtorrent.rc"
+    
+    if [[ ! -f $rtorrent_config ]]; then
+        echo_error "rTorrent config not found at $rtorrent_config"
+        return 1
+    fi
+    
+    # Optimize connection settings
+    sed -i 's/^throttle.max_peers.seed.*/throttle.max_peers.seed = 100/' "$rtorrent_config"
+    sed -i 's/^throttle.max_peers.*/throttle.max_peers = 250/' "$rtorrent_config"
+    sed -i 's/^throttle.min_peers.*/throttle.min_peers = 40/' "$rtorrent_config"
+    
+    # Optimize download rate
+    sed -i 's/^throttle.global_down.*/throttle.global_down = 0/' "$rtorrent_config"
+    sed -i 's/^throttle.global_up.*/throttle.global_up = 0/' "$rtorrent_config"
+    
+    # Increase connections per torrent
+    sed -i 's/^throttle.max_downloads.*/throttle.max_downloads = 300/' "$rtorrent_config"
+    
+    chown ${master}: "$rtorrent_config"
+    
+    echo_progress_done "rTorrent optimized"
+    echo_info "Please restart rTorrent for changes to take effect: systemctl restart rtorrent@${master}"
+}
+
+function _tune_qbittorrent() {
+    if [[ ! -f /install/.qbittorrent.lock ]]; then
+        echo_error "qBittorrent is not installed"
+        return 1
+    fi
+    
+    echo_progress_start "Tuning qBittorrent"
+    
+    master=$(_get_master_username)
+    qb_config="/home/${master}/.config/qBittorrent/qBittorrent.conf"
+    
+    if [[ ! -f $qb_config ]]; then
+        echo_error "qBittorrent config not found"
+        return 1
+    fi
+    
+    # Create backup
+    cp "$qb_config" "${qb_config}.bak.$(date +%s)"
+    
+    # Optimize connection limits
+    sed -i 's/Bittorrent\\\\MaxConnecs=.*/Bittorrent\\MaxConnecs=1000/' "$qb_config"
+    sed -i 's/Bittorrent\\\\MaxConnecsPerTorrent=.*/Bittorrent\\MaxConnecsPerTorrent=500/' "$qb_config"
+    sed -i 's/Bittorrent\\\\MaxUploads=.*/Bittorrent\\MaxUploads=200/' "$qb_config"
+    sed -i 's/Bittorrent\\\\MaxUploadsPerTorrent=.*/Bittorrent\\MaxUploadsPerTorrent=100/' "$qb_config"
+    
+    # Enable UPnP and PEX
+    sed -i 's/Bittorrent\\\\EnableUPnP=.*/Bittorrent\\EnableUPnP=true/' "$qb_config"
+    sed -i 's/Bittorrent\\\\PEXEnabled=.*/Bittorrent\\PEXEnabled=true/' "$qb_config"
+    
+    chown ${master}: "$qb_config"
+    
+    echo_progress_done "qBittorrent optimized"
+    echo_info "Please restart qBittorrent for changes to take effect: systemctl restart qbittorrent@${master}"
+}
+
+function _tune_deluge() {
+    if [[ ! -f /install/.deluge.lock ]]; then
+        echo_error "Deluge is not installed"
+        return 1
+    fi
+    
+    echo_progress_start "Tuning Deluge"
+    
+    master=$(_get_master_username)
+    deluge_config="/home/${master}/.config/deluge/core.conf"
+    
+    if [[ ! -f $deluge_config ]]; then
+        echo_error "Deluge config not found"
+        return 1
+    fi
+    
+    # Create backup
+    cp "$deluge_config" "${deluge_config}.bak.$(date +%s)"
+    
+    # Optimize peer settings
+    sed -i 's/"max_connections_global": .*/"max_connections_global": 2000,/' "$deluge_config"
+    sed -i 's/"max_connections_per_torrent": .*/"max_connections_per_torrent": 500,/' "$deluge_config"
+    sed -i 's/"max_upload_slots_global": .*/"max_upload_slots_global": 200,/' "$deluge_config"
+    sed -i 's/"max_upload_slots_per_torrent": .*/"max_upload_slots_per_torrent": 100,/' "$deluge_config"
+    
+    # Enable DHT and PEX
+    sed -i 's/"dht": false/"dht": true/' "$deluge_config"
+    sed -i 's/"utpex": false/"utpex": true/' "$deluge_config"
+    
+    chown ${master}: "$deluge_config"
+    
+    echo_progress_done "Deluge optimized"
+    echo_info "Please restart Deluge for changes to take effect: systemctl restart deluged@${master} deluge-web@${master}"
+}
+
+function _tune_bbr() {
+    echo_progress_start "Enabling Google BBR congestion control"
+    
+    # Create backup file with timestamp
+    backup_file="/root/.swizzin_tuning_backup_$(date +%s).conf"
+    if [[ ! -f /root/.swizzin_tuning_backup ]]; then
+        cp /etc/sysctl.conf "$backup_file"
+        echo "$backup_file" >> /root/.swizzin_tuning_backup
+        echo_log_only "Backup created at $backup_file"
+    fi
+    
+    # Enable BBR
+    if ! grep -q "^net.ipv4.tcp_congestion_control" /etc/sysctl.conf; then
+        echo "net.ipv4.tcp_congestion_control = bbr" >> /etc/sysctl.conf
+        echo_log_only "Added net.ipv4.tcp_congestion_control = bbr"
+    fi
+    
+    # Enable BBR module
+    if ! grep -q "^net.core.default_qdisc" /etc/sysctl.conf; then
+        echo "net.core.default_qdisc = fq" >> /etc/sysctl.conf
+        echo_log_only "Added net.core.default_qdisc = fq"
+    fi
+    
+    # Increase TCP min/max buffer
+    if ! grep -q "^net.ipv4.tcp_rmem" /etc/sysctl.conf; then
+        echo "net.ipv4.tcp_rmem = 4096 87380 67108864" >> /etc/sysctl.conf
+        echo "net.ipv4.tcp_wmem = 4096 65536 67108864" >> /etc/sysctl.conf
+        echo_log_only "Added TCP memory buffers"
+    fi
+    
+    # Apply changes
+    sysctl -p > /dev/null 2>&1
+    
+    # Try to load BBR module if available
+    modprobe tcp_bbr 2>/dev/null || echo_log_only "BBR module not available or already loaded"
+    
+    echo_progress_done "BBR congestion control enabled"
+    echo_info "BBR will provide better streaming and connectivity performance"
+}
+
+function _tune_plex() {
+    if [[ ! -f /install/.plex.lock ]]; then
+        echo_error "Plex Media Server is not installed"
+        return 1
+    fi
+    
+    echo_progress_start "Optimizing Plex Media Server"
+    
+    # Create backup file with timestamp
+    backup_file="/root/.swizzin_tuning_backup_$(date +%s).conf"
+    if [[ ! -f /root/.swizzin_plex_tuning_backup ]]; then
+        echo "$backup_file" >> /root/.swizzin_plex_tuning_backup
+    fi
+    
+    plex_config="/var/lib/plexmediaserver/Library/Application Support/Plex Media Server"
+    preferences="$plex_config/Preferences.xml"
+    
+    if [[ ! -f "$preferences" ]]; then
+        echo_error "Plex Preferences.xml not found"
+        return 1
+    fi
+    
+    # Create backup
+    cp "$preferences" "${preferences}.bak.$(date +%s)"
+    
+    # Optimize streaming settings
+    # Increase transcoding threads
+    if ! grep -q 'TranscodingThreads=' "$preferences"; then
+        sed -i 's/Preferences/Preferences TranscodingThreads="4"/' "$preferences"
+        echo_log_only "Set TranscodingThreads to 4"
+    fi
+    
+    # Enable remote access optimization
+    if ! grep -q 'DlnaEnabled=' "$preferences"; then
+        sed -i 's/Preferences/Preferences DlnaEnabled="1"/' "$preferences"
+        echo_log_only "Enabled DLNA"
+    fi
+    
+    # Optimize remote streams
+    if ! grep -q 'RemoteStreams=' "$preferences"; then
+        sed -i 's/Preferences/Preferences RemoteStreams="3"/' "$preferences"
+        echo_log_only "Set RemoteStreams to 3"
+    fi
+    
+    # Enable hardware transcoding if available
+    if ! grep -q 'HardwareEncoding=' "$preferences"; then
+        sed -i 's/Preferences/Preferences HardwareEncoding="1"/' "$preferences"
+        echo_log_only "Hardware transcoding enabled"
+    fi
+    
+    # Optimize scanner
+    if ! grep -q 'ScannerLowPriority=' "$preferences"; then
+        sed -i 's/Preferences/Preferences ScannerLowPriority="1"/' "$preferences"
+        echo_log_only "Scanner set to low priority"
+    fi
+    
+    # Optimize playback
+    if ! grep -q 'PreferredStream=' "$preferences"; then
+        sed -i 's/Preferences/Preferences PreferredStream="1"/' "$preferences"
+        echo_log_only "Preferred stream optimization enabled"
+    fi
+    
+    # Fix permissions
+    chown -R plex:plex "$plex_config" 2>/dev/null || true
+    
+    echo_progress_done "Plex Media Server optimized"
+    echo_info "Plex optimization includes transcoding threads, DLNA, remote streams, and hardware encoding"
+    echo_info "Restart Plex for changes to take effect: systemctl restart plexmediaserver"
+}
+
+function _rollback_tuning() {
+    echo_progress_start "Preparing rollback"
+    
+    # Check if backups exist
+    if [[ ! -f /root/.swizzin_tuning_backup ]]; then
+        echo_error "No tuning backups found. Nothing to rollback."
+        return 1
+    fi
+    
+    # List available backups
+    choice=$(
+        whiptail --title "Rollback Options" --menu "Select what to rollback:" --ok-button "Continue" --nocancel 12 50 3 \
+            "System" "Rollback OS/Network/BBR settings" \
+            "Plex" "Rollback Plex optimization" \
+            "All" "Rollback everything" 3>&1 1>&2 2>&3
+    )
+    
+    case $choice in
+        System)
+            _rollback_system_tuning
+            ;;
+        Plex)
+            _rollback_plex_tuning
+            ;;
+        All)
+            _rollback_system_tuning
+            _rollback_plex_tuning
+            ;;
+    esac
+}
+
+function _rollback_system_tuning() {
+    echo_progress_start "Rolling back system tuning"
+    
+    if [[ ! -f /root/.swizzin_tuning_backup ]]; then
+        echo_error "No system tuning backups found"
+        return 1
+    fi
+    
+    # Get the latest backup
+    latest_backup=$(tail -n 1 /root/.swizzin_tuning_backup)
+    
+    if [[ ! -f "$latest_backup" ]]; then
+        echo_error "Backup file not found: $latest_backup"
+        return 1
+    fi
+    
+    # Restore backup
+    cp "$latest_backup" /etc/sysctl.conf
+    echo_log_only "Restored sysctl.conf from $latest_backup"
+    
+    # Apply changes
+    sysctl -p > /dev/null 2>&1
+    
+    # Remove BBR if it was enabled
+    modprobe -r tcp_bbr 2>/dev/null || true
+    
+    echo_progress_done "System tuning rolled back"
+    echo_info "Settings restored from: $(basename $latest_backup)"
+}
+
+function _rollback_plex_tuning() {
+    if [[ ! -f /install/.plex.lock ]]; then
+        echo_warn "Plex is not installed"
+        return 0
+    fi
+    
+    echo_progress_start "Rolling back Plex optimization"
+    
+    if [[ ! -f /root/.swizzin_plex_tuning_backup ]]; then
+        echo_warn "No Plex tuning backups found"
+        return 0
+    fi
+    
+    plex_config="/var/lib/plexmediaserver/Library/Application Support/Plex Media Server"
+    preferences="$plex_config/Preferences.xml"
+    
+    # Find latest backup
+    latest_plex_backup=$(find "$plex_config" -name "Preferences.xml.bak.*" -printf '%T@ %p\n' | sort -rn | head -n 1 | cut -d' ' -f2-)
+    
+    if [[ -f "$latest_plex_backup" ]]; then
+        cp "$latest_plex_backup" "$preferences"
+        chown plex:plex "$preferences" 2>/dev/null || true
+        echo_log_only "Restored Preferences.xml from backup"
+        echo_progress_done "Plex optimization rolled back"
+        echo_info "Please restart Plex: systemctl restart plexmediaserver"
+    else
+        echo_warn "No Plex backup found"
+    fi
+}
+
+
+
+# Main execution
+case "$1" in
+    "")
+        _tune_intro
+        _tune_menu
+        ;;
+    *)
+        echo "Usage: $0 [no arguments for interactive mode]"
+        exit 1
+        ;;
+esac

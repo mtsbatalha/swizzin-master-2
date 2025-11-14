@@ -1,0 +1,287 @@
+#!/bin/bash
+#
+# [swizzin :: Configuration Backup Manager]
+# Manages backups of seedbox application configurations
+#
+# Author             :   swizzin | liara
+#
+# Licensed under GNU General Public License v3.0 GPL-3 (in short)
+#
+
+#shellcheck source=sources/globals.sh
+. /etc/swizzin/sources/globals.sh
+
+BACKUP_DIR="/root/swizzin_backups"
+
+function _backup_intro() {
+    whiptail --title "Configuration Backup Manager" --msgbox "Welcome to Swizzin Backup Manager!\n\nThis tool allows you to:\n• Backup application configurations\n• List all backups\n• Restore from backup\n• Manage backup storage\n\nAll backups are stored in: $BACKUP_DIR" 13 60
+}
+
+function _backup_menu() {
+    choice=$(
+        whiptail --title "Backup Manager" --menu "Select option:" --ok-button "Continue" --nocancel 13 50 4 \
+            "Backup" "Create configuration backups" \
+            "List" "View backup files" \
+            "Restore" "Restore from backup" \
+            "Cleanup" "Remove old backups" 3>&1 1>&2 2>&3
+    )
+    
+    case $choice in
+        Backup)
+            _backup_all_configs
+            ;;
+        List)
+            _list_backups
+            ;;
+        Restore)
+            _restore_from_backup
+            ;;
+        Cleanup)
+            _cleanup_old_backups
+            ;;
+    esac
+    _backup_menu
+}
+
+function _backup_all_configs() {
+    mkdir -p "$BACKUP_DIR"
+    backup_timestamp=$(date +%Y%m%d_%H%M%S)
+    
+    echo_progress_start "Creating configuration backups"
+    
+    # Backup each installed application
+    _backup_app rtorrent "$backup_timestamp"
+    _backup_app deluge "$backup_timestamp"
+    _backup_app qbittorrent "$backup_timestamp"
+    _backup_app transmission "$backup_timestamp"
+    _backup_app plex "$backup_timestamp"
+    
+    echo_progress_done "Backup created"
+    echo_info "Backup timestamp: $backup_timestamp"
+    echo_info "Location: $BACKUP_DIR"
+}
+
+function _backup_app() {
+    local app=$1
+    local timestamp=$2
+    local master=$(_get_master_username)
+    
+    case $app in
+        rtorrent)
+            if [[ ! -f /install/.rtorrent.lock ]]; then return 0; fi
+            tar -czf "$BACKUP_DIR/rtorrent_config_${timestamp}.tar.gz" \
+                -C "/home/${master}" .rtorrent.rc .rtorrent.lock 2>/dev/null || true
+            echo_log_only "rTorrent backed up"
+            ;;
+        deluge)
+            if [[ ! -f /install/.deluge.lock ]]; then return 0; fi
+            tar -czf "$BACKUP_DIR/deluge_config_${timestamp}.tar.gz" \
+                -C "/home/${master}/.config" deluge 2>/dev/null || true
+            echo_log_only "Deluge backed up"
+            ;;
+        qbittorrent)
+            if [[ ! -f /install/.qbittorrent.lock ]]; then return 0; fi
+            tar -czf "$BACKUP_DIR/qbittorrent_config_${timestamp}.tar.gz" \
+                -C "/home/${master}/.config" qBittorrent 2>/dev/null || true
+            echo_log_only "qBittorrent backed up"
+            ;;
+        transmission)
+            if [[ ! -f /install/.transmission.lock ]]; then return 0; fi
+            tar -czf "$BACKUP_DIR/transmission_config_${timestamp}.tar.gz" \
+                -C "/home/${master}/.config" transmission-daemon 2>/dev/null || true
+            echo_log_only "Transmission backed up"
+            ;;
+        plex)
+            if [[ ! -f /install/.plex.lock ]]; then return 0; fi
+            tar -czf "$BACKUP_DIR/plex_config_${timestamp}.tar.gz" \
+                -C "/var/lib/plexmediaserver/Library/Application Support" \
+                "Plex Media Server" 2>/dev/null || true
+            echo_log_only "Plex backed up"
+            ;;
+    esac
+}
+
+function _list_backups() {
+    mkdir -p "$BACKUP_DIR"
+    
+    if [[ ! "$(ls -A $BACKUP_DIR)" ]]; then
+        echo_info "No backups found in $BACKUP_DIR"
+        return 0
+    fi
+    
+    echo_info "Available Backups:"
+    echo ""
+    ls -lh "$BACKUP_DIR" | tail -n +2 | awk '{print $9, "(" $5 ")"}'
+    echo ""
+    echo "Total backup storage: $(du -sh $BACKUP_DIR | cut -f1)"
+}
+
+function _restore_from_backup() {
+    mkdir -p "$BACKUP_DIR"
+    
+    if [[ ! "$(ls -A $BACKUP_DIR)" ]]; then
+        echo_error "No backups available to restore"
+        return 1
+    fi
+    
+    # List available backups
+    backups=($(ls -t "$BACKUP_DIR" | head -20))
+    backup_options=()
+    
+    for i in "${!backups[@]}"; do
+        size=$(du -sh "$BACKUP_DIR/${backups[$i]}" | cut -f1)
+        backup_options+=("$i" "${backups[$i]} ($size)")
+    done
+    
+    if [[ ${#backup_options[@]} -eq 0 ]]; then
+        echo_error "No backups found"
+        return 1
+    fi
+    
+    selected=$(
+        whiptail --title "Select Backup to Restore" --menu "Choose a backup:" 15 70 10 \
+            "${backup_options[@]}" 3>&1 1>&2 2>&3
+    )
+    
+    if [[ -z "$selected" ]]; then
+        return 0
+    fi
+    
+    backup_file="${backups[$selected]}"
+    
+    # Confirm restore
+    if ! whiptail --title "Confirm Restore" --yesno "Restore from: $backup_file\n\nThis will overwrite current configurations.\n\nContinue?" 10 60; then
+        return 0
+    fi
+    
+    echo_progress_start "Restoring from backup"
+    
+    if [[ "$backup_file" =~ rtorrent ]]; then
+        _restore_rtorrent "$backup_file"
+    elif [[ "$backup_file" =~ deluge ]]; then
+        _restore_deluge "$backup_file"
+    elif [[ "$backup_file" =~ qbittorrent ]]; then
+        _restore_qbittorrent "$backup_file"
+    elif [[ "$backup_file" =~ transmission ]]; then
+        _restore_transmission "$backup_file"
+    elif [[ "$backup_file" =~ plex ]]; then
+        _restore_plex "$backup_file"
+    fi
+    
+    echo_progress_done "Restore completed"
+}
+
+function _restore_rtorrent() {
+    local backup=$1
+    local master=$(_get_master_username)
+    
+    if tar -tzf "$BACKUP_DIR/$backup" > /dev/null 2>&1; then
+        tar -xzf "$BACKUP_DIR/$backup" -C "/home/${master}" 2>/dev/null
+        chown ${master}: "/home/${master}/.rtorrent.rc" 2>/dev/null
+        echo_log_only "rTorrent restored from $backup"
+        echo_info "Please restart rTorrent: systemctl restart rtorrent@${master}"
+    else
+        echo_error "Invalid backup file"
+    fi
+}
+
+function _restore_deluge() {
+    local backup=$1
+    local master=$(_get_master_username)
+    
+    if tar -tzf "$BACKUP_DIR/$backup" > /dev/null 2>&1; then
+        tar -xzf "$BACKUP_DIR/$backup" -C "/home/${master}/.config" 2>/dev/null
+        chown -R ${master}: "/home/${master}/.config/deluge" 2>/dev/null
+        echo_log_only "Deluge restored from $backup"
+        echo_info "Please restart Deluge: systemctl restart deluged@${master} deluge-web@${master}"
+    else
+        echo_error "Invalid backup file"
+    fi
+}
+
+function _restore_qbittorrent() {
+    local backup=$1
+    local master=$(_get_master_username)
+    
+    if tar -tzf "$BACKUP_DIR/$backup" > /dev/null 2>&1; then
+        tar -xzf "$BACKUP_DIR/$backup" -C "/home/${master}/.config" 2>/dev/null
+        chown -R ${master}: "/home/${master}/.config/qBittorrent" 2>/dev/null
+        echo_log_only "qBittorrent restored from $backup"
+        echo_info "Please restart qBittorrent: systemctl restart qbittorrent@${master}"
+    else
+        echo_error "Invalid backup file"
+    fi
+}
+
+function _restore_transmission() {
+    local backup=$1
+    local master=$(_get_master_username)
+    
+    if tar -tzf "$BACKUP_DIR/$backup" > /dev/null 2>&1; then
+        tar -xzf "$BACKUP_DIR/$backup" -C "/home/${master}/.config" 2>/dev/null
+        chown -R ${master}: "/home/${master}/.config/transmission-daemon" 2>/dev/null
+        echo_log_only "Transmission restored from $backup"
+        echo_info "Please restart Transmission: systemctl restart transmission@${master}"
+    else
+        echo_error "Invalid backup file"
+    fi
+}
+
+function _restore_plex() {
+    local backup=$1
+    
+    if tar -tzf "$BACKUP_DIR/$backup" > /dev/null 2>&1; then
+        tar -xzf "$BACKUP_DIR/$backup" -C "/var/lib/plexmediaserver/Library/Application Support" 2>/dev/null
+        chown -R plex:plex "/var/lib/plexmediaserver" 2>/dev/null
+        echo_log_only "Plex restored from $backup"
+        echo_info "Please restart Plex: systemctl restart plexmediaserver"
+    else
+        echo_error "Invalid backup file"
+    fi
+}
+
+function _cleanup_old_backups() {
+    mkdir -p "$BACKUP_DIR"
+    
+    # Keep only last 20 backups
+    backup_count=$(ls -1 "$BACKUP_DIR" | wc -l)
+    
+    if [[ $backup_count -le 20 ]]; then
+        echo_info "Current backups: $backup_count (threshold: 20)"
+        echo_info "No cleanup needed"
+        return 0
+    fi
+    
+    echo_progress_start "Cleaning up old backups"
+    
+    # Remove oldest backups, keep newest 20
+    to_remove=$((backup_count - 20))
+    ls -1t "$BACKUP_DIR" | tail -n $to_remove | while read file; do
+        rm -f "$BACKUP_DIR/$file"
+        echo_log_only "Removed old backup: $file"
+    done
+    
+    echo_progress_done "Cleanup completed"
+    echo_info "Removed $to_remove old backup(s)"
+}
+
+# Main execution
+case "$1" in
+    "")
+        _backup_intro
+        _backup_menu
+        ;;
+    "backup")
+        _backup_all_configs
+        ;;
+    "list")
+        _list_backups
+        ;;
+    "restore")
+        _restore_from_backup
+        ;;
+    *)
+        echo "Usage: $0 [backup|list|restore]"
+        exit 1
+        ;;
+esac

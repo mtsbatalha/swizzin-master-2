@@ -1,0 +1,38 @@
+#!/bin/bash
+
+function mono_repo_setup() {
+    distribution=$(_os_distro)
+    codename=$(_os_codename)
+    if [[ ! -f /etc/apt/sources.list.d/mono-xamarin.list ]]; then
+        case $(_os_codename) in
+            buster)
+                gpg --no-default-keyring --keyring /usr/share/keyrings/mono-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 3FA7E0328081BFF6A14DA29AA6A19B38D3D831EF >> ${log} 2>&1
+                echo "deb [signed-by=/usr/share/keyrings/mono-archive-keyring.gpg] https://download.mono-project.com/repo/${distribution} ${codename}/snapshots/6.8/. main" > /etc/apt/sources.list.d/mono-xamarin.list
+                apt_update
+                ;;
+            *) ;;
+        esac
+    fi
+}
+
+function mono_repo_update() {
+    distribution=$(_os_distro)
+    codename=$(_os_codename)
+    if [[ -f /etc/apt/sources.list.d/mono-xamarin.list ]]; then
+        if grep -q "6.8" /etc/apt/sources.list.d/mono-xamarin.list; then
+            :
+        else
+            rm -f /etc/apt/sources.list.d/mono-xamarin.list
+            echo_log_only "Upgrading to mono 6.8 snapshot"
+            mono_repo_setup
+            apt_upgrade
+            apt_autoremove
+        fi
+    else
+        if ! command -v mono > /dev/null 2>&1; then
+            mono_repo_setup
+            apt_install mono-complete
+            apt_upgrade
+        fi
+    fi
+}
