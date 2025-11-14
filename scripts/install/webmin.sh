@@ -5,11 +5,37 @@
 
 _install_webmin() {
     echo_progress_start "Installing Webmin repo"
+    # Preferred method: use signed-by keyring
     echo "deb [signed-by=/usr/share/keyrings/webmin-archive-keyring.gpg] https://download.webmin.com/download/repository sarge contrib" > /etc/apt/sources.list.d/webmin.list
-    curl -s https://download.webmin.com/jcameron-key.asc | gpg --dearmor > /usr/share/keyrings/webmin-archive-keyring.gpg 2>> "${log}"
+
+    # Try to fetch and dearmor the Webmin GPG key
+    if which gpg > /dev/null 2>&1; then
+        if curl -fsSL https://download.webmin.com/jcameron-key.asc | gpg --dearmor > /usr/share/keyrings/webmin-archive-keyring.gpg 2>> "${log}"; then
+            echo_log_only "Webmin GPG key downloaded and stored"
+        else
+            echo_warn "Failed to dearmor Webmin key with gpg; will try apt-key fallback"
+            rm -f /usr/share/keyrings/webmin-archive-keyring.gpg 2>/dev/null || true
+            # fall through to apt-key fallback below
+        fi
+    else
+        echo_warn "gpg not available; will try apt-key fallback for Webmin key"
+    fi
+
+    # If keyring is missing or empty, fallback to apt-key (older systems)
+    if [[ ! -s /usr/share/keyrings/webmin-archive-keyring.gpg ]]; then
+        echo_info "Using apt-key fallback to add Webmin repository key"
+        if curl -fsSL https://download.webmin.com/jcameron-key.asc | apt-key add - >> "${log}" 2>&1; then
+            echo_log_only "Webmin GPG key added via apt-key"
+            # For older apt versions that do not support 'signed-by', rewrite sources.list without signed-by
+            echo "deb https://download.webmin.com/download/repository sarge contrib" > /etc/apt/sources.list.d/webmin.list
+        else
+            echo_error "Failed to add Webmin GPG key via apt-key"
+        fi
+    fi
+
     echo_progress_done "Repo added"
     apt_update
-    apt_install webmin
+    apt_install webmin || echo_warn "webmin package installation failed; check apt logs"
 }
 
 _install_webmin
